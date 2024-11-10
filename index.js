@@ -1,9 +1,32 @@
+const scoreEl = document.querySelector("#scoreEl");
 const canvas = document.querySelector("canvas");
 const c = canvas.getContext("2d");
 
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+canvas.width = 1024;
+canvas.height = 576;
 
+function drawStartScreen() {
+  c.clearRect(0, 0, canvas.width, canvas.height);
+  c.font = "40px Arial";
+  c.fillStyle = "black";
+  c.textAlign = "center";
+  c.fillText("Space Invaders", canvas.width / 2, canvas.height / 2 - 50);
+
+  c.fillStyle = "green";
+  c.fillRect(canvas.width / 2 - 100, canvas.height / 2, 200, 50);
+  c.fillStyle = "white";
+  c.font = "20px Arial";
+  c.fillText("Start Game", canvas.width / 2, canvas.height / 2 + 30);
+
+  c.font = "24px Arial";
+  c.fillStyle = "black";
+  c.textAlign = "center";
+  c.fillText("WASD to move", canvas.width / 2, canvas.height - 150);
+  c.fillText("Space to shoot", canvas.width / 2, canvas.height - 100);
+  canvas.addEventListener("click", startGame);
+}
+
+drawStartScreen();
 class Player {
   constructor() {
     this.velocity = {
@@ -12,6 +35,7 @@ class Player {
     };
 
     this.rotation = 0;
+    this.opacity = 1;
 
     const image = new Image();
     image.src = "./img/spaceship.png";
@@ -30,6 +54,7 @@ class Player {
     //c.fillStyle = "red";
     //c.fillRect(this.position.x, this.position.y, this.width, this.height);
     c.save();
+    c.globalAlpha = this.opacity;
     c.translate(
       player.position.x + player.width / 2,
       player.position.y + player.height / 2
@@ -66,7 +91,7 @@ class Projectile {
     this.position = position;
     this.velocity = velocity;
 
-    this.radius = 3;
+    this.radius = 4;
   }
 
   draw() {
@@ -84,8 +109,165 @@ class Projectile {
   }
 }
 
+class Particle {
+  constructor({ position, velocity, radius, color, fades }) {
+    this.position = position;
+    this.velocity = velocity;
+
+    this.radius = radius;
+    this.color = color;
+    this.opacity = 1;
+    this.fades = fades;
+  }
+
+  draw() {
+    c.save();
+    c.globalAlpha = this.opacity;
+    c.beginPath();
+    c.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
+    c.fillStyle = this.color;
+    c.fill();
+    c.closePath();
+    c.restore();
+  }
+
+  update() {
+    this.draw();
+    this.position.x += this.velocity.x;
+    this.position.y += this.velocity.y;
+
+    if (this.fades) this.opacity -= 0.01;
+  }
+}
+
+class InvaderProjectile {
+  constructor({ position, velocity }) {
+    this.position = position;
+    this.velocity = velocity;
+
+    this.width = 3;
+    this.height = 10;
+  }
+
+  draw() {
+    c.fillStyle = "white";
+    c.fillRect(this.position.x, this.position.y, this.width, this.height);
+  }
+
+  update() {
+    this.draw();
+    this.position.x += this.velocity.x;
+    this.position.y += this.velocity.y;
+  }
+}
+
+class Invader {
+  constructor({ position }) {
+    this.velocity = {
+      x: 0,
+      y: 0,
+    };
+
+    const image = new Image();
+    image.src = "./img/invader.png";
+    image.onload = () => {
+      const scale = 1;
+      this.image = image;
+      this.width = image.width * scale;
+      this.height = image.height * scale;
+      this.position = {
+        x: position.x,
+        y: position.y,
+      };
+    };
+  }
+  draw() {
+    //c.fillStyle = "red";
+    //c.fillRect(this.position.x, this.position.y, this.width, this.height);
+    c.drawImage(
+      this.image,
+      this.position.x,
+      this.position.y,
+      this.width,
+      this.height
+    );
+  }
+
+  update({ velocity }) {
+    if (this.image) {
+      this.draw();
+      this.position.x += velocity.x;
+      this.position.y += velocity.y;
+    }
+  }
+
+  shoot(invaderProjectiles) {
+    invaderProjectiles.push(
+      new InvaderProjectile({
+        position: {
+          x: this.position.x + this.width / 2,
+          y: this.position.y + this.height,
+        },
+        velocity: {
+          x: 0,
+          y: 5,
+        },
+      })
+    );
+  }
+}
+
+class Grid {
+  constructor() {
+    this.position = {
+      x: 0,
+      y: 0,
+    };
+    this.velocity = {
+      x: 3,
+      y: 0,
+    };
+    this.invaders = [];
+
+    const columns = Math.floor(Math.random() * 10 + 5);
+    const rows = Math.floor(Math.random() * 5 + 2);
+
+    this.width = columns * 30;
+
+    for (let i = 0; i < columns; i++) {
+      for (let j = 0; j < rows; j++) {
+        this.invaders.push(
+          new Invader({
+            position: {
+              x: i * 30,
+              y: j * 30,
+            },
+          })
+        );
+      }
+    }
+  }
+  update() {
+    this.position.x += this.velocity.x;
+    this.position.y += this.velocity.y;
+
+    this.velocity.y = 0;
+
+    if (this.position.x + this.width >= canvas.width || this.position.x <= 0) {
+      this.velocity.x = -this.velocity.x;
+      this.velocity.y = 50;
+    }
+  }
+}
+
 const player = new Player();
 const projectiles = [];
+const grids = [];
+const invaderProjectiles = [];
+const particles = [];
+const backPart = [];
+let intervalId;
+
 const keys = {
   w: {
     pressed: false,
@@ -104,11 +286,123 @@ const keys = {
   },
 };
 
+let frames = 0;
+let randomInterval = Math.floor(Math.random() * 500) + 500;
+let game = {
+  over: false,
+  active: true,
+};
+let score = 0;
+
+for (let i = 0; i < 100; i++) {
+  particles.push(
+    new Particle({
+      position: {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+      },
+      velocity: {
+        x: 0,
+        y: 0.3,
+      },
+      radius: Math.random() * 2,
+      color: "white",
+    })
+  );
+}
+
+function createParticles({ object, color, fades }) {
+  for (let i = 0; i < 15; i++) {
+    particles.push(
+      new Particle({
+        position: {
+          x: object.position.x + object.width / 2,
+          y: object.position.y + object.height / 2,
+        },
+        velocity: {
+          x: (Math.random() - 0.5) * 2,
+          y: (Math.random() - 0.5) * 2,
+        },
+        radius: Math.random() * 3,
+        color: color || "#BAA0DE",
+        fades: true,
+      })
+    );
+  }
+}
+
 function animate() {
+  if (!game.active) return;
   requestAnimationFrame(animate);
   c.fillStyle = "black";
   c.fillRect(0, 0, canvas.width, canvas.height);
   player.update();
+  particles.forEach((particle, i) => {
+    if (particle.position.y - particle.radius >= canvas.height) {
+      particle.position.x = Math.random() * canvas.width;
+      particle.position.y = -particle.radius;
+    }
+    if (particle.opacity <= 0) {
+      setTimeout(() => {
+        particles.splice(i, 1);
+      }, 0);
+    } else {
+      particle.update();
+    }
+  });
+  console.log(particles);
+  invaderProjectiles.forEach((invaderProjectile, index) => {
+    if (
+      invaderProjectile.position.y + invaderProjectile.height >=
+      canvas.height
+    ) {
+      setTimeout(() => {
+        invaderProjectiles.splice(index, 1);
+      }, 0);
+    } else invaderProjectile.update();
+
+    // projectile hits player
+    if (
+      invaderProjectile.position.y + invaderProjectile.height >=
+        player.position.y &&
+      invaderProjectile.position.x + invaderProjectile.width >=
+        player.position.x &&
+      invaderProjectile.position.x <= player.position.x + player.width
+    ) {
+      console.log("YOU LOSE");
+      clearInterval(intervalId);
+
+      setTimeout(() => {
+        invaderProjectiles.splice(index, 1);
+        player.opacity = 0;
+        game.over = true;
+      }, 0);
+
+      setTimeout(() => {
+        game.active = false;
+        c.clearRect(0, 0, canvas.width, canvas.height);
+        c.font = "40px Arial";
+        c.fillStyle = "black";
+        c.textAlign = "center";
+        c.fillText("You LOST!", canvas.width / 2, canvas.height / 2 - 50);
+        c.fillText(
+          "Score: " + score,
+          canvas.width / 2,
+          canvas.height / 2 - 100
+        );
+
+        c.fillStyle = "green";
+        c.fillRect(canvas.width / 2 - 100, canvas.height / 2, 200, 50);
+        c.fillStyle = "white";
+        c.font = "20px Arial";
+        c.fillText("Restart", canvas.width / 2, canvas.height / 2 + 30);
+        canvas.addEventListener("click", startGame);
+      }, 2000);
+
+      createParticles({ object: player, color: "white" });
+    }
+  });
+
   projectiles.forEach((projectile, index) => {
     if (projectile.position.y + projectile.radius <= 0) {
       setTimeout(() => {
@@ -117,6 +411,66 @@ function animate() {
     } else {
       projectile.update();
     }
+  });
+
+  grids.forEach((grid, gridIndex) => {
+    grid.update();
+
+    //spawn projectiles
+    if (frames % 100 === 0 && grid.invaders.length > 0) {
+      grid.invaders[Math.floor(Math.random() * grid.invaders.length)].shoot(
+        invaderProjectiles
+      );
+    }
+
+    grid.invaders.forEach((invader, i) => {
+      invader.update({ velocity: grid.velocity });
+
+      //projectiles hit enemy
+      projectiles.forEach((projectile, j) => {
+        if (
+          projectile.position.y - projectile.radius <=
+            invader.position.y + invader.height &&
+          projectile.position.x + projectile.radius >= invader.position.x &&
+          projectile.position.x - projectile.radius <=
+            invader.position.x + invader.width &&
+          projectile.position.y + projectile.radius >= invader.position.y
+        ) {
+          setTimeout(() => {
+            const invaderFound = grid.invaders.find((invader2) => {
+              return invader2 === invader;
+            });
+
+            const projectileFound = projectiles.find(
+              (projectile2) => projectile2 === projectile
+            );
+
+            //remove invader and projectile
+            if (invaderFound && projectileFound) {
+              score += 100;
+              scoreEl.innerHTML = score;
+              createParticles({ object: invader });
+
+              grid.invaders.splice(i, 1);
+              projectiles.splice(j, 1);
+
+              if (grid.invaders.length > 0) {
+                const firstInvader = grid.invaders[0];
+                const lastInvader = grid.invaders[grid.invaders.length - 1];
+
+                grid.width =
+                  lastInvader.position.x -
+                  firstInvader.position.x +
+                  lastInvader.width;
+                grid.position.x = firstInvader.position.x;
+              } else {
+                grids.splice(gridIndex, 1);
+              }
+            }
+          }, 0);
+        }
+      });
+    });
   });
 
   if (keys.a.pressed && player.position.x >= 0) {
@@ -141,43 +495,77 @@ function animate() {
   ) {
     player.velocity.y = 5;
   } else player.velocity.y = 0;
+  //spawn enemies
+  if (frames % randomInterval === 0) {
+    grids.push(new Grid());
+    randomInterval = Math.floor(Math.random() * 500) + 500;
+    frames = 0;
+  }
+
+  frames++;
 }
 
-animate();
+function startGame(event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  if (
+    x >= canvas.width / 2 - 100 &&
+    x <= canvas.width / 2 + 100 &&
+    y >= canvas.height / 2 &&
+    y <= canvas.height / 2 + 50
+  ) {
+    projectiles.length = 0;
+    grids.length = 0;
+    invaderProjectiles.length = 0;
+    player.opacity = 1;
+    game.over = false;
+    game.active = true;
+    score = 0;
+    animate();
+    canvas.removeEventListener("click", startGame);
+    c.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
 
 addEventListener("keydown", ({ key }) => {
+  if (game.over) return;
+
   switch (key) {
-    case "a":
+    case "a" || "ArrowLeft":
       console.log("left");
       keys.a.pressed = true;
       break;
-    case "d":
+    case "d" || "ArrowRight":
       console.log("right");
       keys.d.pressed = true;
       break;
-    case "w":
+    case "w" || "ArrowUp":
       console.log("up");
       keys.w.pressed = true;
       break;
-    case "s":
+    case "s" || "ArrowDown":
       console.log("down");
       keys.s.pressed = true;
       break;
     case " ":
-      console.log("space");
+      if (keys.space.pressed) return;
       keys.space.pressed = true;
-      projectiles.push(
-        new Projectile({
-          position: {
-            x: player.position.x + player.width / 2,
-            y: player.position.y,
-          },
-          velocity: {
-            x: 0,
-            y: -10,
-          },
-        })
-      );
+      console.log("space");
+      intervalId = setInterval(() => {
+        projectiles.push(
+          new Projectile({
+            position: {
+              x: player.position.x + player.width / 2,
+              y: player.position.y,
+            },
+            velocity: {
+              x: 0,
+              y: -10,
+            },
+          })
+        );
+      }, 150);
       //console.log(projectiles);
       break;
   }
@@ -203,6 +591,7 @@ addEventListener("keyup", ({ key }) => {
       break;
     case " ":
       console.log("space");
+      clearInterval(intervalId);
       keys.space.pressed = false;
       break;
   }
