@@ -229,7 +229,7 @@ class Grid {
     };
     this.invaders = [];
 
-    const columns = Math.floor(Math.random() * 10 + 5);
+    const columns = Math.floor(Math.random() * 5 + 5);
     const rows = Math.floor(Math.random() * 5 + 2);
 
     this.width = columns * 30;
@@ -552,6 +552,18 @@ addEventListener("keydown", ({ key }) => {
       if (keys.space.pressed) return;
       keys.space.pressed = true;
       console.log("space");
+      projectiles.push(
+        new Projectile({
+          position: {
+            x: player.position.x + player.width / 2,
+            y: player.position.y,
+          },
+          velocity: {
+            x: 0,
+            y: -10,
+          },
+        })
+      );
       intervalId = setInterval(() => {
         projectiles.push(
           new Projectile({
